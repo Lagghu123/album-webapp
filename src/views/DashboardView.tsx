@@ -7,6 +7,19 @@ interface DashboardProps {
   onChangeView: (view: ViewState) => void;
 }
 
+// Curated list of high-quality cover images for new albums
+const DEFAULT_COVERS = [
+  'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&q=80', // Mountains
+  'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80', // Waterfall
+  'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&q=80', // Seascape
+  'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=800&q=80', // Nature
+  'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=800&q=80', // Forest
+  'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&q=80', // Mist
+  'https://images.unsplash.com/photo-1519681393798-2f43f1f993c2?w=800&q=80'  // Night sky
+];
+
+const getRandomCover = () => DEFAULT_COVERS[Math.floor(Math.random() * DEFAULT_COVERS.length)];
+
 const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +28,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [albumTitle, setAlbumTitle] = useState('');
   const [albumPrivacy, setAlbumPrivacy] = useState<'private' | 'public'>('private');
+  const [isCreating, setIsCreating] = useState(false);
   
   // Menu State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -26,7 +40,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
 
   const fetchAlbums = async () => {
       try {
-          setLoading(true);
+          // setLoading(true); // Don't block UI on refresh, only initial load could use a separate state if needed
           const { data: { user } } = await supabase.auth.getUser();
           
           if (user) {
@@ -41,9 +55,9 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
               const mappedAlbums: Album[] = (data || []).map((a: any) => ({
                   id: a.id,
                   title: a.title,
-                  cover: a.cover_url || 'https://via.placeholder.com/800x600?text=No+Cover', // Default cover
-                  date: new Date(a.created_at).toLocaleDateString(),
-                  photosCount: 0, // Would need a subquery or separate fetch to count photos
+                  cover: a.cover_url || 'https://via.placeholder.com/800x600?text=No+Cover',
+                  date: new Date(a.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+                  photosCount: 0, // Placeholder: Would typically require a separate count query or a view
                   private: a.is_private,
                   publicLink: !!a.public_link_token,
                   shared: a.is_shared,
@@ -78,10 +92,15 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
   const handleCreateAlbum = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!albumTitle.trim()) return;
+    
+    setIsCreating(true);
 
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            alert("You must be logged in to create an album.");
+            return;
+        }
 
         const { error } = await supabase
             .from('albums')
@@ -89,27 +108,46 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                 title: albumTitle,
                 is_private: albumPrivacy === 'private',
                 owner_id: user.id,
-                cover_url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCihmFhbGb25vEBfDU5xZcDtbcjmYVJPQQlDI8ZzNy2eutSJ18-hH3znrUWPh2T8ml5liNIoZ93VcFBtBPAQaXiRkO_JUc6DfT3BCx4SsOupYbNNQmIZDnZh4ATd26BRIqGu4J2V5WSniSk9maZCFP_1ghsprytt8jt-imxDEPkhnlXtx34d4Kua6nonHvVIGPhAUJRt8_hbQ0FhbZ_AgoIxcjfozUMORf4waDLw-qHD5F32qToiTSj8Hm60k4Vnpwx4l28MkCxJnRs' // Placeholder for now
+                cover_url: getRandomCover()
             }]);
 
         if (error) throw error;
         
-        fetchAlbums(); // Refresh list
+        await fetchAlbums(); // Refresh list to show new album
         setShowAlbumModal(false);
+        setAlbumTitle('');
 
-    } catch (err) {
+    } catch (err: any) {
         console.error("Error creating album:", err);
+        alert(`Failed to create album: ${err.message || 'Unknown error'}`);
+    } finally {
+        setIsCreating(false);
     }
   };
 
   const handleDeleteAlbum = async (id: string) => {
-     if(confirm("Are you sure?")) {
-         await supabase.from('albums').delete().eq('id', id);
-         fetchAlbums();
+     if(confirm("Are you sure you want to delete this album? This action cannot be undone.")) {
+         try {
+             const { error } = await supabase.from('albums').delete().eq('id', id);
+             if (error) throw error;
+             
+             // Optimistic update
+             setAlbums(prev => prev.filter(a => a.id !== id));
+         } catch (err: any) {
+             console.error("Error deleting album:", err);
+             alert("Failed to delete album.");
+         }
      }
   };
 
-  if (loading) return <div className="p-8 text-white">Loading albums...</div>;
+  if (loading) return (
+      <div className="flex items-center justify-center h-full w-full">
+          <div className="flex flex-col items-center gap-4">
+              <span className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+              <p className="text-slate-400 text-sm animate-pulse">Loading library...</p>
+          </div>
+      </div>
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth h-full" onClick={() => setActiveMenuId(null)}>
@@ -149,6 +187,17 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
 
         {/* Albums Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20">
+          {/* Create New Placeholder - First Item for easier access */}
+          <div 
+            onClick={openCreateModal}
+            className="group relative flex flex-col items-center justify-center gap-4 rounded-2xl p-3 bg-surface-dark/30 border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-white/5 transition-all duration-300 cursor-pointer min-h-[280px]"
+          >
+            <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+              <span className="material-symbols-outlined text-white/50 group-hover:text-primary text-[32px]">add</span>
+            </div>
+            <p className="text-white/50 font-medium group-hover:text-white transition-colors">Create New Album</p>
+          </div>
+
           {/* Mapped Albums */}
           {albums.map((album) => (
             <div 
@@ -162,6 +211,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 opacity-90 group-hover:opacity-100"
                     src={album.cover}
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
                 {album.private && (
                     <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-md text-white/90 p-1.5 rounded-lg flex items-center justify-center border border-white/10">
                     <span className="material-symbols-outlined text-[16px]">lock</span>
@@ -170,13 +220,13 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                 </div>
                 <div className="flex flex-col gap-1 px-1 relative">
                     <div className="flex justify-between items-start">
-                        <h3 className="text-lg font-bold text-white leading-tight">{album.title}</h3>
+                        <h3 className="text-lg font-bold text-white leading-tight truncate pr-6">{album.title}</h3>
                         <button 
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setActiveMenuId(activeMenuId === album.id ? null : album.id);
                             }}
-                            className={`text-slate-500 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10 relative z-10 ${activeMenuId === album.id ? 'bg-white/10 text-white' : ''}`}
+                            className={`text-slate-500 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10 relative z-10 -mr-2 -mt-1 ${activeMenuId === album.id ? 'bg-white/10 text-white' : ''}`}
                         >
                             <span className="material-symbols-outlined text-[20px]">more_vert</span>
                         </button>
@@ -209,24 +259,13 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                 </div>
             </div>
           ))}
-
-          {/* Create New Placeholder */}
-          <div 
-            onClick={openCreateModal}
-            className="group relative flex flex-col items-center justify-center gap-4 rounded-2xl p-3 bg-surface-dark/30 border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-white/5 transition-all duration-300 cursor-pointer min-h-[280px]"
-          >
-            <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-              <span className="material-symbols-outlined text-white/50 group-hover:text-primary text-[32px]">add</span>
-            </div>
-            <p className="text-white/50 font-medium group-hover:text-white transition-colors">Create New Album</p>
-          </div>
         </div>
       </section>
 
       {/* Create Album Modal */}
       <Modal 
         isOpen={showAlbumModal} 
-        onClose={() => setShowAlbumModal(false)} 
+        onClose={() => !isCreating && setShowAlbumModal(false)} 
         title="Create New Album"
       >
         <form onSubmit={handleCreateAlbum} className="flex flex-col gap-6">
@@ -239,6 +278,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                     placeholder="e.g. Summer Holiday 2024"
                     className="w-full bg-black/20 border border-slate-700 rounded-md py-2.5 px-4 text-white placeholder-slate-500 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-sm"
                     autoFocus
+                    disabled={isCreating}
                 />
             </div>
              <div>
@@ -247,6 +287,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                     <button
                         type="button"
                         onClick={() => setAlbumPrivacy('private')}
+                        disabled={isCreating}
                         className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${albumPrivacy === 'private' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
                     >
                         <span className="material-symbols-outlined text-[24px]">lock</span>
@@ -255,6 +296,7 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
                     <button
                         type="button"
                         onClick={() => setAlbumPrivacy('public')}
+                        disabled={isCreating}
                         className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${albumPrivacy === 'public' ? 'bg-primary/10 border-primary text-primary' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
                     >
                         <span className="material-symbols-outlined text-[24px]">public</span>
@@ -264,9 +306,21 @@ const DashboardView: React.FC<DashboardProps> = ({ onChangeView }) => {
             </div>
 
              <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-2">
-                <button type="button" onClick={() => setShowAlbumModal(false)} className="px-4 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white transition-colors">Cancel</button>
-                <button type="submit" className="px-5 py-2 rounded-md text-sm font-bold bg-primary text-white hover:bg-blue-600 shadow-lg shadow-primary/20 transition-all">
-                    Create Album
+                <button 
+                    type="button" 
+                    onClick={() => setShowAlbumModal(false)} 
+                    disabled={isCreating}
+                    className="px-4 py-2 rounded-md text-sm font-medium text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                >
+                    Cancel
+                </button>
+                <button 
+                    type="submit" 
+                    disabled={isCreating || !albumTitle.trim()}
+                    className="px-5 py-2 rounded-md text-sm font-bold bg-primary text-white hover:bg-blue-600 shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                    {isCreating && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>}
+                    {isCreating ? 'Creating...' : 'Create Album'}
                 </button>
             </div>
         </form>
