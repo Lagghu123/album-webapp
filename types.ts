@@ -1,9 +1,10 @@
-export type ViewState = 'login' | 'dashboard' | 'album-detail' | 'sharing' | 'ui-kit' | 'memories' | 'admin';
+export type ViewState = 'login' | 'register' | 'dashboard' | 'album-detail' | 'sharing' | 'ui-kit' | 'memories' | 'admin';
 
 export type SortOption = 'date-desc' | 'date-asc' | 'name-asc';
 export type ViewMode = 'grid' | 'list';
 
 export interface User {
+  id: string; // Changed from email to UUID for DB
   email: string;
   name: string;
   role: 'Admin' | 'User';
@@ -22,12 +23,13 @@ export interface Photo {
   comments?: number;
   date?: string;
   timestamp?: number;
-  isFavorite?: boolean; // Added for favorite functionality
+  isFavorite?: boolean; 
   camera?: string;
   location?: string;
   aperture?: string;
   shutter?: string;
   iso?: string;
+  storage_path?: string; // For storage management
 }
 
 export interface Album {
@@ -40,4 +42,5 @@ export interface Album {
   private?: boolean;
   publicLink?: boolean;
   role?: 'Admin' | 'Contributor' | 'View Only';
+  owner_id?: string;
 }

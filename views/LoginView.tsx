@@ -1,22 +1,34 @@
 import React, { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface LoginProps {
-  onLogin: (email: string) => void;
+  onRegisterClick: () => void;
 }
 
-const LoginView: React.FC<LoginProps> = ({ onLogin }) => {
+const LoginView: React.FC<LoginProps> = ({ onRegisterClick }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    setError(null);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      // onLogin prop is no longer needed as App.tsx listens to auth state changes
+    } catch (err: any) {
+      setError(err.message || "Failed to sign in");
+    } finally {
       setIsLoading(false);
-      onLogin(email);
-    }, 1000);
+    }
   };
 
   return (
@@ -37,6 +49,12 @@ const LoginView: React.FC<LoginProps> = ({ onLogin }) => {
           <h1 className="text-2xl font-bold text-white tracking-tight">Welcome back</h1>
           <p className="text-slate-400 text-sm mt-1">Sign in to access your shared memories</p>
         </div>
+
+        {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs text-center">
+                {error}
+            </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
@@ -105,7 +123,7 @@ const LoginView: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         <p className="mt-8 text-center text-xs text-slate-500">
-            Don't have an account? <a href="#" className="text-white hover:underline font-medium">Sign up</a>
+            Don't have an account? <button onClick={onRegisterClick} className="text-white hover:underline font-medium">Sign up</button>
         </p>
       </div>
     </div>
