@@ -19,5 +19,17 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+
+  "include": [
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "views/**/*.ts",
+    "views/**/*.tsx"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "vite.config.ts"
+  ]
 }
